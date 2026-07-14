@@ -1,6 +1,20 @@
 import { useState, useRef, useEffect } from "react";
 
-const API = "http://localhost:8000";
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+// ── Session helpers ──────────────────────────
+// Each browser tab keeps its own session id in localStorage.
+// The backend creates a fresh session automatically if none/invalid is sent.
+function getSessionId() {
+  return localStorage.getItem("docrag_session_id") || "";
+}
+function setSessionId(id) {
+  if (id) localStorage.setItem("docrag_session_id", id);
+}
+function sessionHeaders(extra = {}) {
+  const sid = getSessionId();
+  return sid ? { "X-Session-Id": sid, ...extra } : { ...extra };
+}
 
 const FileIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -54,8 +68,9 @@ export default function App() {
 
   async function fetchStats() {
     try {
-      const r = await fetch(`${API}/stats`);
+      const r = await fetch(`${API}/stats`, { headers: sessionHeaders() });
       const d = await r.json();
+      if (d.session_id) setSessionId(d.session_id);
       setStats(d);
     } catch {}
   }
@@ -72,8 +87,13 @@ export default function App() {
     const fd = new FormData();
     fd.append("file", file);
     try {
-      const r = await fetch(`${API}/upload`, { method: "POST", body: fd });
+      const r = await fetch(`${API}/upload`, {
+        method: "POST",
+        headers: sessionHeaders(),
+        body: fd,
+      });
       const d = await r.json();
+      if (d.session_id) setSessionId(d.session_id);
       if (d.status === "ok") {
         setUploadedFiles(prev => [...prev, file.name]);
         setMessages(prev => [...prev, {
@@ -103,7 +123,7 @@ export default function App() {
     try {
       const r = await fetch(`${API}/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: sessionHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ question: q, top_k: 5 }),
       });
       const d = await r.json();
